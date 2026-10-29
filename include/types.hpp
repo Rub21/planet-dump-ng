@@ -26,12 +26,6 @@ enum nwr_enum {
   nwr_relation
 };
 
-enum gpx_visibility_enum {
-  gpx_visibility_private,
-  gpx_visibility_public,
-  gpx_visibility_trackable,
-  gpx_visibility_identifiable
-};
 
 struct user {
   static const int num_keys = 1;
@@ -254,7 +248,9 @@ struct gpx_file {
   bool visible;
   std::string name, description;
   boost::posix_time::ptime timestamp;
-  gpx_visibility_enum visibility;
+  // kept as text, so new or removed values in the database enum do not
+  // break the dump.
+  std::string visibility;
 };
 
 BOOST_FUSION_ADAPT_STRUCT(
@@ -265,7 +261,7 @@ BOOST_FUSION_ADAPT_STRUCT(
   (std::string, name)
   (std::string, description)
   (boost::posix_time::ptime, timestamp)
-  (gpx_visibility_enum, visibility)
+  (std::string, visibility)
   )
 
 // one row of gpx_tracks. geom is the hex EWKB text that PostGIS writes in

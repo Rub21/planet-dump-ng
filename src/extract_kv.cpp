@@ -132,12 +132,6 @@ struct app_item {
     return 0;
   }
 
-  int operator()(int, gpx_visibility_enum e) const {
-    char c = char(e);
-    out.put(c);
-    return 0;
-  }
-
   std::ostream &out;
 };
 

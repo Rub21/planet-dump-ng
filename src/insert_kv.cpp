@@ -128,14 +128,7 @@ struct unapp_item {
     in.read(&c, 1);
     e = nwr_enum(c);
     return 0;
-  }
-
-  int operator()(int, gpx_visibility_enum &e) const {
-    char c;
-    in.read(&c, 1);
-    e = gpx_visibility_enum(c);
-    return 0;
-  }
+  }    
 
   std::istream &in;
 };
