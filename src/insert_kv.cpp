@@ -128,7 +128,14 @@ struct unapp_item {
     in.read(&c, 1);
     e = nwr_enum(c);
     return 0;
-  }    
+  }
+
+  int operator()(int, gpx_visibility_enum &e) const {
+    char c;
+    in.read(&c, 1);
+    e = gpx_visibility_enum(c);
+    return 0;
+  }
 
   std::istream &in;
 };
@@ -169,3 +176,5 @@ template void insert_kv<way_node>(way_node &, const slice_t &, const slice_t &);
 template void insert_kv<relation>(relation &, const slice_t &, const slice_t &);
 template void insert_kv<relation_member>(relation_member &, const slice_t &, const slice_t &);
 template void insert_kv<changeset_comment>(changeset_comment &, const slice_t &, const slice_t &);
+template void insert_kv<gpx_file>(gpx_file &, const slice_t &, const slice_t &);
+template void insert_kv<gpx_track>(gpx_track &, const slice_t &, const slice_t &);

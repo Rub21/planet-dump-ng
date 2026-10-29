@@ -208,6 +208,22 @@ private:
       }
     }
 
+    void operator()(gpx_visibility_enum &e) const {
+      std::pair<char *, size_t> str = *itr++;
+      unescape(str);
+      if (strncmp(str.first, "private", str.second) == 0) {
+        e = gpx_visibility_private;
+      } else if (strncmp(str.first, "public", str.second) == 0) {
+        e = gpx_visibility_public;
+      } else if (strncmp(str.first, "trackable", str.second) == 0) {
+        e = gpx_visibility_trackable;
+      } else if (strncmp(str.first, "identifiable", str.second) == 0) {
+        e = gpx_visibility_identifiable;
+      } else {
+        BOOST_THROW_EXCEPTION(std::runtime_error((boost::format("Unrecognised value for gpx_visibility_enum: `%1%'.") % str.first).str()));
+      }
+    }
+
     inline int hex2digit(char ch) const {
       switch (ch) {
       case '0':

@@ -132,6 +132,12 @@ struct app_item {
     return 0;
   }
 
+  int operator()(int, gpx_visibility_enum e) const {
+    char c = char(e);
+    out.put(c);
+    return 0;
+  }
+
   std::ostream &out;
 };
 
@@ -176,3 +182,5 @@ template struct extract_kv<way_node>;
 template struct extract_kv<relation>;
 template struct extract_kv<relation_member>;
 template struct extract_kv<changeset_comment>;
+template struct extract_kv<gpx_file>;
+template struct extract_kv<gpx_track>;

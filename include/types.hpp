@@ -26,6 +26,13 @@ enum nwr_enum {
   nwr_relation
 };
 
+enum gpx_visibility_enum {
+  gpx_visibility_private,
+  gpx_visibility_public,
+  gpx_visibility_trackable,
+  gpx_visibility_identifiable
+};
+
 struct user {
   static const int num_keys = 1;
   static const std::vector<std::string> &column_names();
@@ -237,6 +244,47 @@ BOOST_FUSION_ADAPT_STRUCT(
   (bool, visible)
   (boost::posix_time::ptime, timestamp)
   (boost::optional<int64_t>, redaction_id)
+  )
+
+struct gpx_file {
+  static const int num_keys = 1;
+  static const std::vector<std::string> &column_names();
+
+  int64_t id, user_id;
+  bool visible;
+  std::string name, description;
+  boost::posix_time::ptime timestamp;
+  gpx_visibility_enum visibility;
+};
+
+BOOST_FUSION_ADAPT_STRUCT(
+  gpx_file,
+  (int64_t, id)
+  (int64_t, user_id)
+  (bool, visible)
+  (std::string, name)
+  (std::string, description)
+  (boost::posix_time::ptime, timestamp)
+  (gpx_visibility_enum, visibility)
+  )
+
+// one row of gpx_tracks. geom is the hex EWKB text that PostGIS writes in
+// COPY output, a LineString or Point with Z (altitude) and M (epoch time).
+struct gpx_track {
+  static const int num_keys = 3;
+  static const std::vector<std::string> &column_names();
+
+  int64_t gpx_id;
+  int32_t trackid, segment;
+  std::string geom;
+};
+
+BOOST_FUSION_ADAPT_STRUCT(
+  gpx_track,
+  (int64_t, gpx_id)
+  (int32_t, trackid)
+  (int32_t, segment)
+  (std::string, geom)
   )
 
 enum class user_info_level {
