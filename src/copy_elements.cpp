@@ -1,4 +1,5 @@
 #include "copy_elements.hpp"
+#include "gpx_writer.hpp"
 #include "insert_kv.hpp"
 #include "types.hpp"
 #include "config.h"
@@ -332,6 +333,36 @@ void extract_users(std::map<int64_t, std::string> &display_name_map) {
   while (reader(u)) {
     if (u.data_public) {
       display_name_map.insert(std::make_pair(u.id, u.display_name));
+    }
+  }
+}
+
+void write_gpx(gpx_writer &writer, const std::set<std::string> &visibilities) {
+  db_reader<gpx_file> file_reader("gpx_files");
+  db_reader<gpx_track> track_reader("gpx_tracks");
+
+  gpx_file file;
+  gpx_track track;
+  bool has_track = track_reader(track);
+  std::vector<gpx_track> tracks;
+
+  // both tables are sorted by gpx_id, so walk them together.
+  while (file_reader(file)) {
+    const bool wanted = file.visible && (visibilities.count(file.visibility) > 0);
+    tracks.clear();
+
+    while (has_track && (track.gpx_id < file.id)) {
+      has_track = track_reader(track);
+    }
+    while (has_track && (track.gpx_id == file.id)) {
+      if (wanted) {
+        tracks.push_back(track);
+      }
+      has_track = track_reader(track);
+    }
+
+    if (wanted && !tracks.empty()) {
+      writer.trace(file, tracks);
     }
   }
 }

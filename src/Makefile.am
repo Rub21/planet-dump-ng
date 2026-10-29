@@ -11,6 +11,7 @@ ___planet_dump_ng_SOURCES=\
 	copy_elements.cpp \
 	dump_archive.cpp \
 	dump_reader.cpp \
+	gpx_writer.cpp \
 	extract_kv.cpp \
 	history_filter.cpp \
 	insert_kv.cpp \

@@ -3,6 +3,7 @@
 #include "output_writer.hpp"
 #include "xml_writer.hpp"
 #include "pbf_writer.hpp"
+#include "gpx_writer.hpp"
 #include "history_filter.hpp"
 #include "changeset_filter.hpp"
 #include "config.h"
@@ -15,6 +16,7 @@
 #include <boost/foreach.hpp>
 #include <string>
 #include <map>
+#include <set>
 #include <fstream>
 #include <stdexcept>
 
@@ -47,6 +49,13 @@ static void get_options(int argc, char **argv, po::variables_map &vm) {
     ("changesets-no-userinfo", po::value<std::string>(), "changeset XML output file (without user data)")
     ("changeset-discussions-no-userinfo", po::value<std::string>(),
      "changeset discussions XML output file (without user data)")
+    ("gpx,g", po::value<std::string>(),
+     "GPX output file of the GPS traces. needs the users, gpx_files and "
+     "gpx_tracks tables in the dump file")
+    ("gpx-visibility", po::value<std::vector<std::string> >()->multitoken()
+       ->default_value(std::vector<std::string>(1, "identifiable"), "identifiable"),
+     "visibilities of the traces written to --gpx: identifiable, trackable or "
+     "both. only identifiable traces have name, description and URL")
     ("dense-nodes,d", po::value<bool>()->default_value("true"), "use dense nodes for PBF output")
     ("dump-file,f", po::value<std::string>(), "PostgreSQL table dump to read")
     ("generator", po::value<std::string>()->default_value(PACKAGE_STRING),
@@ -89,15 +98,26 @@ static void get_options(int argc, char **argv, po::variables_map &vm) {
        vm.count("changesets") + vm.count("changeset-discussions") +
        vm.count("xml-no-userinfo") + vm.count("history-xml-no-userinfo") +
        vm.count("pbf-no-userinfo") + vm.count("history-pbf-no-userinfo") + 
-       vm.count("changesets-no-userinfo") + vm.count("changeset-discussions-no-userinfo")) == 0) {
+       vm.count("changesets-no-userinfo") + vm.count("changeset-discussions-no-userinfo") +
+       vm.count("gpx")) == 0) {
     std::cerr <<
       "No output file provided! You must provide one or more of "
       "--xml, --history-xml, --pbf, --history-pbf, --changesets, "
-      "--changeset-discussions (or the respective -no-userinfo options) to get output.\n\n";
+      "--changeset-discussions, --gpx (or the respective -no-userinfo options) to get output.\n\n";
     std::cerr << desc << std::endl;
     exit(1);
   }
   
+  if (vm.count("gpx")) {
+    BOOST_FOREACH(const std::string &v, vm["gpx-visibility"].as<std::vector<std::string> >()) {
+      // private and public traces must never be in a dump.
+      if ((v != "identifiable") && (v != "trackable")) {
+        std::cerr << "Invalid --gpx-visibility '" << v << "', use identifiable or trackable.\n";
+        exit(1);
+      }
+    }
+  }
+
   if (vm.count("meta-file")) {
     std::ifstream ifs(meta_file.c_str());
     if (!ifs)
@@ -119,25 +139,37 @@ static void get_options(int argc, char **argv, po::variables_map &vm) {
  * guaranteed in the PostgreSQL dump file. returns the maximum time seen
  * in a timestamp of any element in the dump file.
  */
-bt::ptime setup_databases(const std::string &dump_file, bool resume, unsigned int max_concurrency) {
+bt::ptime setup_databases(const std::string &dump_file, bool resume, unsigned int max_concurrency, bool with_osm, bool with_gpx) {
   std::list<boost::shared_ptr<base_thread> > threads;
   
 #define THREAD_RUN(type,table) threads.push_back(boost::make_shared<run_thread<type> >(table, dump_file, resume, max_concurrency))
 
-  THREAD_RUN(changeset, "changesets");
-  THREAD_RUN(node, "nodes");
-  THREAD_RUN(way, "ways");
-  THREAD_RUN(relation, "relations");
-  
-  THREAD_RUN(current_tag, "changeset_tags");
-  THREAD_RUN(old_tag, "node_tags");
-  THREAD_RUN(old_tag, "way_tags");
-  THREAD_RUN(old_tag, "relation_tags");
-  THREAD_RUN(way_node, "way_nodes");
-  THREAD_RUN(relation_member, "relation_members");
-  
+  // users are needed by every output.
   THREAD_RUN(user, "users");
-  THREAD_RUN(changeset_comment, "changeset_comments");
+
+  // the OSM tables are only read when an OSM output is asked for, so a GPX
+  // dump can run on its own, from a dump file with only the GPS tables.
+  if (with_osm) {
+    THREAD_RUN(changeset, "changesets");
+    THREAD_RUN(node, "nodes");
+    THREAD_RUN(way, "ways");
+    THREAD_RUN(relation, "relations");
+
+    THREAD_RUN(current_tag, "changeset_tags");
+    THREAD_RUN(old_tag, "node_tags");
+    THREAD_RUN(old_tag, "way_tags");
+    THREAD_RUN(old_tag, "relation_tags");
+    THREAD_RUN(way_node, "way_nodes");
+    THREAD_RUN(relation_member, "relation_members");
+
+    THREAD_RUN(changeset_comment, "changeset_comments");
+  }
+
+  // only read the GPS tables when asked, so a dump without them still works.
+  if (with_gpx) {
+    THREAD_RUN(gpx_file, "gpx_files");
+    THREAD_RUN(gpx_track, "gpx_tracks");
+  }
 
 #undef THREAD_RUN
   
@@ -166,7 +198,15 @@ int main(int argc, char *argv[]) {
     const bool resume = options.count("resume") > 0;
     unsigned int max_concurrency = options["max-concurrency"].as<unsigned int>();
     const std::string dump_file(options["dump-file"].as<std::string>());
-    const bt::ptime max_time = setup_databases(dump_file, resume, max_concurrency);
+    const bool with_gpx = options.count("gpx") > 0;
+    const bool with_osm = (options.count("xml") + options.count("history-xml") +
+                           options.count("pbf") + options.count("history-pbf") +
+                           options.count("changesets") + options.count("changeset-discussions") +
+                           options.count("xml-no-userinfo") + options.count("history-xml-no-userinfo") +
+                           options.count("pbf-no-userinfo") + options.count("history-pbf-no-userinfo") +
+                           options.count("changesets-no-userinfo") +
+                           options.count("changeset-discussions-no-userinfo")) > 0;
+    const bt::ptime max_time = setup_databases(dump_file, resume, max_concurrency, with_osm, with_gpx);
 
     // users aren't dumped directly to the files. we only use them to build up a map
     // of uid -> name where a missing uid indicates that the user doesn't have public
@@ -239,18 +279,28 @@ int main(int argc, char *argv[]) {
         display_name_map, max_time, user_info_level::ANON, historical_versions::NONE, changeset_discussions::FULL)));
     }
 
-    std::cerr << "Writing changesets..." << std::endl;
-    run_threads<changeset>(writers);
-    std::cerr << "Writing nodes..." << std::endl;
-    run_threads<node>(writers);
-    std::cerr << "Writing ways..." << std::endl;
-    run_threads<way>(writers);
-    std::cerr << "Writing relations..." << std::endl;
-    run_threads<relation>(writers);
+    if (with_osm) {
+      std::cerr << "Writing changesets..." << std::endl;
+      run_threads<changeset>(writers);
+      std::cerr << "Writing nodes..." << std::endl;
+      run_threads<node>(writers);
+      std::cerr << "Writing ways..." << std::endl;
+      run_threads<way>(writers);
+      std::cerr << "Writing relations..." << std::endl;
+      run_threads<relation>(writers);
 
-    // tell writers to clean up - write finals, close files, that sort of thing
-    BOOST_FOREACH(boost::shared_ptr<output_writer> writer, writers) {
-      writer->finish();
+      // tell writers to clean up - write finals, close files, that sort of thing
+      BOOST_FOREACH(boost::shared_ptr<output_writer> writer, writers) {
+        writer->finish();
+      }
+    }
+
+    if (with_gpx) {
+      std::cerr << "Writing GPS traces..." << std::endl;
+      gpx_writer writer(options["gpx"].as<std::string>(), options, display_name_map, max_time);
+      const std::vector<std::string> &v = options["gpx-visibility"].as<std::vector<std::string> >();
+      write_gpx(writer, std::set<std::string>(v.begin(), v.end()));
+      writer.finish();
     }
     std::cerr << "Done" << std::endl;
 
