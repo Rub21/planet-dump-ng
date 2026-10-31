@@ -49,13 +49,10 @@ static void get_options(int argc, char **argv, po::variables_map &vm) {
     ("changesets-no-userinfo", po::value<std::string>(), "changeset XML output file (without user data)")
     ("changeset-discussions-no-userinfo", po::value<std::string>(),
      "changeset discussions XML output file (without user data)")
-    ("gpx,g", po::value<std::string>(),
-     "GPX output file of the GPS traces. needs the users, gpx_files and "
-     "gpx_tracks tables in the dump file")
+    ("gpx,g", po::value<std::string>(), "GPS traces GPX output file")
     ("gpx-visibility", po::value<std::vector<std::string> >()->multitoken()
        ->default_value(std::vector<std::string>(1, "identifiable"), "identifiable"),
-     "visibilities of the traces written to --gpx: identifiable, trackable or "
-     "both. only identifiable traces have name, description and URL")
+     "trace visibilities in GPX output: identifiable, trackable or both")
     ("dense-nodes,d", po::value<bool>()->default_value("true"), "use dense nodes for PBF output")
     ("dump-file,f", po::value<std::string>(), "PostgreSQL table dump to read")
     ("generator", po::value<std::string>()->default_value(PACKAGE_STRING),
